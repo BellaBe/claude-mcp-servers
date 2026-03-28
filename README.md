@@ -1,7 +1,7 @@
-# MCP Server Wiring Guide for Claude Code
+# Claude Code MCP Servers
 
-Registry of custom MCP servers, wiring patterns, and known failure modes.
-Written from production debugging — not docs.
+Custom MCP servers for Claude Code: Telegram, Gmail, and WhatsApp channels.
+Wiring patterns, configuration, and known failure modes — written from production debugging.
 
 ---
 
@@ -35,19 +35,19 @@ A server can be both — it pushes notifications AND exposes tools (reply, react
     "telegram": {
       "type": "stdio",
       "command": "bash",
-      "args": ["/home/bellabe/.claude/channels/telegram/telegram-start.sh"],
+      "args": ["~/.claude/channels/telegram/telegram-start.sh"],
       "env": {}
     },
     "gmail": {
       "type": "stdio",
       "command": "bash",
-      "args": ["/home/bellabe/.claude/channels/gmail/gmail-start.sh"],
+      "args": ["~/.claude/channels/gmail/gmail-start.sh"],
       "env": {}
     },
     "whatsapp": {
       "type": "stdio",
       "command": "bash",
-      "args": ["/home/bellabe/.claude/channels/whatsapp/whatsapp-start.sh"],
+      "args": ["~/.claude/channels/whatsapp/whatsapp-start.sh"],
       "env": {}
     }
   }
@@ -57,7 +57,7 @@ A server can be both — it pushes notifications AND exposes tools (reply, react
 ### Adding a new server
 
 ```bash
-claude mcp add <name> --scope user -- bash /home/bellabe/.claude/channels/<name>/<name>-start.sh
+claude mcp add <name> --scope user -- bash ~/.claude/channels/<name>/<name>-start.sh
 ```
 
 ### Removing a server
