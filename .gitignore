@@ -1,0 +1,9 @@
+token.json
+access.json
+node_modules/
+*.log
+inbox/
+outbox/
+.wwebjs_auth/
+.env
+.env.*

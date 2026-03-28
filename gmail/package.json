@@ -1,0 +1,16 @@
+{
+  "name": "gmail-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run server.ts",
+    "auth": "bun run auth.ts",
+    "check": "./gmail-start.sh --check",
+    "configure": "./gmail-start.sh --configure"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "googleapis": "^144.0.0"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "telegram",
+  "private": true,
+  "scripts": {
+    "start": "bun run server.ts",
+    "check": "./telegram-start.sh --check",
+    "configure": "./telegram-start.sh --configure"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "grammy": "^1.35.0"
+  }
+}
