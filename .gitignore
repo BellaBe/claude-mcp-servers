@@ -1,6 +1,7 @@
 token.json
 access.json
 node_modules/
+bun.lock
 *.log
 inbox/
 outbox/
