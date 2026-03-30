@@ -1,6 +1,6 @@
 # Claude Code MCP Servers
 
-Custom MCP servers for Claude Code: Telegram, Gmail, and WhatsApp channels.
+Custom MCP servers for Claude Code: Telegram, Gmail, WhatsApp, Calendar, and Email.
 Wiring patterns, configuration, and known failure modes — written from production debugging.
 
 ---
@@ -12,6 +12,8 @@ Wiring patterns, configuration, and known failure modes — written from product
 | telegram | channel (push + tools) | `~/.claude/channels/telegram/` | `--dangerously-load-development-channels server:telegram` | active |
 | gmail | tool server (pull only) | `~/.claude/channels/gmail/` | none | active |
 | whatsapp | channel (push + tools) | `~/.claude/channels/whatsapp/` | `--dangerously-load-development-channels server:whatsapp` | active |
+| calendar | tool server (pull only) | `~/.claude/channels/calendar/` | none | active |
+| email | tool server (pull only) | `~/.claude/channels/email/` | none | active |
 
 ### Channel vs Tool Server
 
@@ -49,6 +51,18 @@ A server can be both — it pushes notifications AND exposes tools (reply, react
       "command": "bash",
       "args": ["~/.claude/channels/whatsapp/whatsapp-start.sh"],
       "env": {}
+    },
+    "calendar": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["~/.claude/channels/calendar/calendar-start.sh"],
+      "env": {}
+    },
+    "email": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["~/.claude/channels/email/email-start.sh"],
+      "env": {}
     }
   }
 }
@@ -76,7 +90,7 @@ claude mcp remove <name> --scope user
 claude --dangerously-load-development-channels server:telegram server:whatsapp
 ```
 
-Gmail loads automatically — no flag needed.
+Gmail, Calendar, and Email load automatically — no flag needed.
 
 ### With agent
 
@@ -125,6 +139,8 @@ tools:
   - mcp__telegram__*
   - mcp__gmail__*
   - mcp__whatsapp__*
+  - mcp__calendar__*
+  - mcp__email__*
 ---
 ```
 
@@ -210,7 +226,7 @@ pkill -f telegram-start
 pkill -f "server.ts"
 pkill -f "server.mjs"
 # Verify
-ps aux | grep -E "(telegram|gmail|whatsapp)" | grep -v grep
+ps aux | grep -E "(telegram|gmail|whatsapp|calendar|email)" | grep -v grep
 ```
 
 Then restart Claude Code.
@@ -260,7 +276,7 @@ cat ~/.claude.json | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 servers = d.get('mcpServers', {})
-for name in ['telegram', 'gmail', 'whatsapp']:
+for name in ['telegram', 'gmail', 'whatsapp', 'calendar', 'email']:
     status = 'OK' if name in servers else 'MISSING'
     print(f'  {name}: {status}')
 "
@@ -272,6 +288,8 @@ ls -la ~/.claude/channels/*/start*.sh
 cd ~/.claude/channels/telegram && bash telegram-start.sh 2>&1 | head -5
 cd ~/.claude/channels/gmail && bash gmail-start.sh 2>&1 | head -5
 cd ~/.claude/channels/whatsapp && bash whatsapp-start.sh 2>&1 | head -5
+cd ~/.claude/channels/calendar && bash calendar-start.sh --check
+cd ~/.claude/channels/email && bash email-start.sh --check
 
 # 6. Start session and verify tools
 claude --dangerously-load-development-channels server:telegram server:whatsapp
@@ -299,16 +317,112 @@ claude --dangerously-load-development-channels server:telegram server:whatsapp
 │   │   ├── gmail-start.sh         # startup script (loads secrets from pass)
 │   │   ├── package.json
 │   │   └── node_modules/
-│   └── whatsapp/
-│       ├── server.mjs             # MCP server (channel + tools)
-│       ├── whatsapp-start.sh      # startup script
+│   ├── whatsapp/
+│   │   ├── server.mjs             # MCP server (channel + tools)
+│   │   ├── whatsapp-start.sh      # startup script
+│   │   ├── package.json
+│   │   ├── access.json
+│   │   ├── debug.log
+│   │   ├── inbox/                 # downloaded media
+│   │   ├── .wwebjs_auth/          # puppeteer session (auto-created)
+│   │   └── node_modules/
+│   ├── calendar/
+│   │   ├── server.ts              # MCP server (tools only — CalDAV + Cal.com)
+│   │   ├── calendar-start.sh      # startup script
+│   │   ├── package.json
+│   │   ├── debug.log
+│   │   └── node_modules/
+│   └── email/
+│       ├── server.ts              # MCP server (tools only — IMAP + SMTP/Resend)
+│       ├── email-start.sh         # startup script
 │       ├── package.json
-│       ├── access.json
 │       ├── debug.log
-│       ├── inbox/                 # downloaded media
-│       ├── .wwebjs_auth/          # puppeteer session (auto-created)
 │       └── node_modules/
+├── secrets/
+│   ├── secret.sh                  # GPG-encrypted credential manager
+│   └── README.md                  # setup and usage docs
 └── agents/                        # (project-level agents reference MCP tools in frontmatter)
+```
+
+---
+
+## Secrets
+
+All credentials are stored in `pass` (GPG-encrypted `~/.password-store/`). Managed by `secrets/secret.sh`.
+
+### Security model
+
+Servers load secrets at startup by spawning `secret.sh get <channel> <key>` via `spawnSync`. Credentials are stored in local TypeScript `const` variables — never in `process.env`.
+
+| Layer | Claude can access? |
+|-------|--------------------|
+| `~/.password-store/*.gpg` | No — GPG-encrypted |
+| `process.env` at runtime | No — secrets not in env |
+| `/proc/<pid>/environ` | No — nothing to read |
+| TypeScript heap variables | No — no filesystem exposure |
+
+The startup script only passes the `SECRET_CMD` path (to `secret.sh`) as an env var. The server deletes it from `process.env` immediately after loading secrets.
+
+### Setup
+
+```bash
+# One-time: install pass + GPG
+sudo apt install pass gnupg
+gpg --gen-key
+pass init <gpg-key-id>
+
+# Store credentials per server
+./secrets/secret.sh set calendar caldav-url "https://..."
+./secrets/secret.sh set calendar caldav-username "user@example.com"
+./secrets/secret.sh set calendar caldav-password "app-password"
+
+./secrets/secret.sh set email imap-host "imap.fastmail.com"
+./secrets/secret.sh set email imap-user "user@example.com"
+./secrets/secret.sh set email imap-pass "app-password"
+./secrets/secret.sh set email smtp-host "smtp.fastmail.com"
+
+# Or use interactive setup
+./calendar/calendar-start.sh --configure
+./email/email-start.sh --configure
+```
+
+### GPG cache for MCP startup
+
+Claude Code spawns startup scripts as subprocesses with no TTY. Prime the GPG cache before starting:
+
+```bash
+pass show claude-calendar/caldav-url > /dev/null && claude
+```
+
+### Storage layout
+
+```
+~/.password-store/
+  claude-telegram/
+    bot-token.gpg
+    admin-id.gpg
+  claude-gmail/
+    client-id.gpg
+    client-secret.gpg
+    refresh-token.gpg
+  claude-calendar/
+    caldav-url.gpg
+    caldav-username.gpg
+    caldav-password.gpg
+    calcom-api-key.gpg        # optional
+    calcom-base-url.gpg        # optional
+  claude-email/
+    imap-host.gpg
+    imap-port.gpg
+    imap-user.gpg
+    imap-pass.gpg
+    smtp-host.gpg              # optional if using Resend
+    smtp-port.gpg
+    smtp-user.gpg
+    smtp-pass.gpg
+    smtp-from.gpg
+    resend-api-key.gpg         # optional alternative to SMTP
+    resend-from.gpg
 ```
 
 ---

@@ -1,0 +1,15 @@
+{
+  "name": "calendar-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run server.ts",
+    "check": "./calendar-start.sh --check",
+    "configure": "./calendar-start.sh --configure"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "tsdav": "^2.1.1"
+  }
+}
