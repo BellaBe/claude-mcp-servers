@@ -297,6 +297,16 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 // ── Tool handlers ───────────────────────────────────────────────────────
 
+// ── Signature: read at send time from ~/.config/leanos-mail, appended like the LeanOS mailer ──
+const SIGNATURE_FILE = process.env.GMAIL_SIGNATURE_FILE ?? join(homedir(), '.config', 'leanos-mail', 'signature-gmail.txt')
+
+function withSignature(body: string): string {
+  let sig = ''
+  try { sig = readFileSync(SIGNATURE_FILE, 'utf8').replace(/\s+$/, '') } catch { return body }
+  if (!sig || body.includes(sig)) return body
+  return `${body.replace(/\s+$/, '')}\n\n-- \n${sig}`
+}
+
 function buildRawEmail(opts: {
   to: string
   subject: string
@@ -310,14 +320,25 @@ function buildRawEmail(opts: {
   if (opts.from) lines.push(`From: ${opts.from}`)
   lines.push(`To: ${opts.to}`)
   if (opts.cc) lines.push(`Cc: ${opts.cc}`)
-  lines.push(`Subject: ${opts.subject}`)
-  lines.push('Content-Type: text/plain; charset=utf-8')
+  // Non-ASCII subjects as RFC 2047 encoded words; the body as base64 so Gmail never re-wraps or re-encodes it.
+  const subject = /^[\x20-\x7e]*$/.test(opts.subject) ? opts.subject : `=?UTF-8?B?${Buffer.from(opts.subject).toString('base64')}?=`
+  lines.push(`Subject: ${subject}`)
+  lines.push('MIME-Version: 1.0')
+  // Plain text plus an HTML alternative: Gmail hard-wraps plain-only mail at ~78 characters in transit.
+  const boundary = `lean-${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+  lines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
   if (opts.in_reply_to) {
     lines.push(`In-Reply-To: ${opts.in_reply_to}`)
     lines.push(`References: ${opts.references ?? opts.in_reply_to}`)
   }
   lines.push('')
-  lines.push(opts.body)
+  const plain = withSignature(opts.body)
+  const text = plain.replace(/\r?\n/g, '\r\n')
+  const html = `<div dir="ltr">${plain.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r?\n/g, '<br>')}</div>`
+  const b64 = (s: string) => Buffer.from(s).toString('base64').match(/.{1,76}/g) ?? ['']
+  lines.push(`--${boundary}`, 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: base64', '', ...b64(text))
+  lines.push(`--${boundary}`, 'Content-Type: text/html; charset=utf-8', 'Content-Transfer-Encoding: base64', '', ...b64(html))
+  lines.push(`--${boundary}--`)
   return lines.join('\r\n')
 }
 

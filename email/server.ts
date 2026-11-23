@@ -160,6 +160,16 @@ async function sendViaResend(opts: {
   return res.json() as Promise<{ id: string }>
 }
 
+// ── Signature: read at send time from ~/.config/leanos-mail, appended like the LeanOS mailer ──
+const SIGNATURE_FILE = process.env.EMAIL_SIGNATURE_FILE ?? join(homedir(), '.config', 'leanos-mail', 'signature.txt')
+
+function withSignature(body: string): string {
+  let sig = ''
+  try { sig = readFileSync(SIGNATURE_FILE, 'utf8').replace(/\s+$/, '') } catch { return body }
+  if (!sig || body.includes(sig)) return body
+  return `${body.replace(/\s+$/, '')}\n\n-- \n${sig}`
+}
+
 async function sendEmail(opts: {
   to: string
   subject: string
@@ -175,7 +185,7 @@ async function sendEmail(opts: {
       to: opts.to,
       cc: opts.cc,
       subject: opts.subject,
-      text: opts.body,
+      text: withSignature(opts.body),
       ...(opts.in_reply_to ? {
         inReplyTo: opts.in_reply_to,
         references: opts.references ?? opts.in_reply_to,
@@ -187,7 +197,7 @@ async function sendEmail(opts: {
   const result = await sendViaResend({
     to: opts.to,
     subject: opts.subject,
-    text: opts.body,
+    text: withSignature(opts.body),
     cc: opts.cc,
     in_reply_to: opts.in_reply_to,
   })

@@ -20,8 +20,10 @@ const SECRET_CMD = process.env.CLAUDE_SECRET_CMD ?? join(homedir(), 'claude-secr
 
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID
 const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
-const PORT = 3000
-const REDIRECT_URI = `http://localhost:${PORT}/oauth2callback`
+// Must match an Authorized redirect URI on the OAuth client; server.ts reads the same variable.
+const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI ?? 'http://localhost:3000/oauth2callback'
+const REDIRECT = new URL(REDIRECT_URI)
+const PORT = Number(REDIRECT.port || 80)
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.error('GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET must be set in env')
@@ -54,7 +56,7 @@ const opener = process.platform === 'darwin' ? 'open' : process.platform === 'wi
 Bun.spawn([opener, authUrl], { stdout: 'ignore', stderr: 'ignore' }).unref()
 
 const server = createServer(async (req, res) => {
-  if (!req.url?.startsWith('/oauth2callback')) {
+  if (!req.url?.startsWith(REDIRECT.pathname)) {
     res.writeHead(404)
     res.end('Not found')
     return
